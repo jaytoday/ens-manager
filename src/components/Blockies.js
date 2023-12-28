@@ -1,10 +1,10 @@
 import React from 'react'
 import createIcon from '../lib/blockies'
 
-export default ({ address, imageSize = 42}) => {
+export default ({ address, imageSize = 42, className}) => {
   var imgURL = createIcon({
     seed: address,
-    size: 10,
+    size: 8,
     scale: 5,
   }).toDataURL();
   var style = {
@@ -15,5 +15,5 @@ export default ({ address, imageSize = 42}) => {
     display: 'inline-block',
   };
 
-  return <span className="ethereum-address-icon" style={style} />
+  return <span className={"ethereum-address-icon " + className} style={style} />
 }

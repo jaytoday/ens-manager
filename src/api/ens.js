@@ -25,6 +25,13 @@ function getNamehash(name) {
   })
 }
 
+function getNamehashWithLabelHash(labelHash, nodeHash) {
+  return getWeb3().then(({ web3 }) =>{
+    let node = web3.sha3(nodeHash + labelHash.slice(2), {encoding: 'hex'});
+    return node.toString();
+  })
+}
+
 let ensContract = [
   {
     "constant": true,
@@ -722,6 +729,7 @@ const watchEvent = ({ contract, addr, eventName}, filter, params, callback) => {
   console.log('WATCH EVENT', contract, addr, eventName )
   function eventFactory(contract, eventName, filter, params, callback) {
     const myEvent = contract[eventName](filter,params)
+    console.log(myEvent)
     myEvent.watch((error, log) => {
       console.log(event, `here in the ${contract} Event`, log)
       if(error) {
@@ -752,6 +760,7 @@ export {
   getENSContract,
   getENSEvent,
   getNamehash,
+  getNamehashWithLabelHash,
   getResolverContract,
   watchEvent
 }

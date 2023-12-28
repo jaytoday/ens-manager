@@ -1,43 +1,51 @@
-import { fromJS, Record, List } from 'immutable'
+import Immutable, { fromJS, Record, List, Map } from 'immutable'
 import './index.css'
 import createStore from 'redaxe'
 import ImmutableLogger from './lib/ImmutableLogger'
-import { syncData, localStorageMiddlewareImmutable } from './lib/LocalStorage'
+import { syncDataImmutable, localStorageMiddlewareImmutable } from './lib/LocalStorage'
+import { nodeTransformer } from './localStorage';
 
-let syncProp = ['nodeCache', 'rootName', 'rootAddress']
-let initialData = new new Record({
+let updateFormRecord = Record({
+  newOwner: '',
+  newResolver: '',
+  newSubDomain: '',
+  subDomain: '',
+  newAddr: '',
+  newContent: ''
+}, 'updateFormRecord')
+
+let initialDataRecord = Record({
+  readOnly: false,
   nameSearch: '',
-  nodes: new List(),
-  reverseNodes: new List(),
-  nodeCache: new List(),
-  notifications: new List(),
+  nodes: List(),
+  reverseNodes: List(),
+  nodeCache: List(),
+  notifications: List(),
+  preImageDB: Map(),
   publicResolver: '',
   selectedNode: '',
-  updateForm: new new Record({
-    newOwner: '',
-    newResolver: '',
-    newSubDomain: '',
-    subDomain: '',
-    newAddr: '',
-    newContent: ''
-  }),
+  isAboutModalActive: false,
+  updateForm: updateFormRecord(),
   selectedReverseNode: '',
   reverseRecordSearch: '',
   reverseUpdateForm: new new Record({
     newName: '',
     newResolverAddr: ''
   }),
-  currentTab: 'nodeDetails'
-})
+  currentTab: 'nodeDetails',
+  accounts: List(),
+}, 'initialDataRecord')
 
-//var syncedData = syncData(syncProp)(initialData)
-
+let initialData = new initialDataRecord()
+let syncProp = ['preImageDB', 'nodes']
+let transformers = [nodeTransformer]
+let syncedData = syncDataImmutable(syncProp, initialData, transformers, Immutable)
 let middleware = [
   ImmutableLogger,
-  //localStorageMiddlewareImmutable(syncProp, Immutable)
+  localStorageMiddlewareImmutable(syncProp, Immutable)
 ]
 
 export default createStore(
-  fromJS(initialData),//fromJS(syncedData),
+  fromJS(syncedData),
   middleware
 )

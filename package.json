@@ -4,14 +4,20 @@
   "private": true,
   "dependencies": {
     "classnames": "^2.2.5",
-    "ethereum-ens": "^0.7.1",
+    "ethereum-ens": "^0.7.4",
     "immutable": "^3.8.1",
+    "immutable-stringify": "^1.0.4",
+    "json-immutable": "^0.3.0",
     "react": "^15.5.4",
     "react-dom": "^15.5.4",
+    "react-ga": "^2.2.0",
+    "react-loader": "^2.4.2",
+    "react-modal": "^3.1.10",
     "react-notification": "^6.7.0",
-    "react-redaxe": "0.0.10",
+    "react-redaxe": "0.0.11",
     "react-router-dom": "4.1.1",
-    "redaxe": "0.0.14",
+    "recompose": "^0.26.0",
+    "redaxe": "0.0.15",
     "uuid": "^3.0.1",
     "web3": "^0.19.0",
     "whatwg-fetch": "^2.0.3"
@@ -65,7 +71,8 @@
     "test": "node scripts/test.js --env=jsdom",
     "styles:watch": "stylus -I ./node_modules -w ./src/styl/main.styl -o ./src/css/main.css",
     "styles": "stylus -I ./node_modules ./src/styl/main.styl -o ./src/css/main.css",
-    "deploy": "npm run styles && npm run build && cd build && mv index.html 200.html && surge . --domain ensmanager.surge.sh"
+    "deploy": "npm run styles && npm run build && cd build && mv index.html 200.html && surge . --domain manager.ens.domains",
+    "deploy:dev": "npm run styles && npm run build && cd build && mv index.html 200.html && surge . --domain devensmanager.surge.sh"
   },
   "jest": {
     "collectCoverageFrom": [

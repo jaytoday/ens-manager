@@ -1,10 +1,19 @@
 @import url("https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,300,400,400i,600,700,900");
+.loader {
+  display: inline-block;
+  position: absolute;
+  right: 20px;
+  bottom: 24px;
+}
 * {
   box-sizing: border-box;
 }
 body {
   background: #333;
   font-family: "Source Sans Pro";
+}
+p {
+  line-height: 1.8em;
 }
 button {
   border: none;
@@ -70,7 +79,7 @@ input:focus {
   height: 80px;
   width: 100%;
   padding: 10px 20px;
-  z-index: 100;
+  z-index: 1000;
 }
 .header:after,
 .header:before {
@@ -238,9 +247,31 @@ h1 {
   display: flex;
   height: 45px;
 }
+.node-blockies {
+  border-radius: 50%;
+}
+.remove-node {
+  position: absolute;
+  font-size: 16px;
+  color: #fff;
+  top: 0;
+  right: 0;
+  margin-top: -6px;
+  margin-right: -8px;
+  display: none;
+  z-index: 1000;
+  width: 20px;
+  height: 20px;
+  background: #000;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  border: solid 1px #000;
+}
 .node-details {
   padding: 10px;
-  width: 250px;
+  width: 300px;
+  position: relative;
   display: flex;
   align-content: center;
 }
@@ -253,6 +284,9 @@ h1 {
 .node-details:hover {
   background: #419bfc;
   cursor: pointer;
+}
+.node-details:hover .remove-node {
+  display: flex;
 }
 .reverse-nodes-root .node-details.node-details {
   width: 100%;
@@ -279,10 +313,35 @@ h1 {
   font-size: 20px;
   width: 100%;
   background: #262b78;
-  opacity: 0.7;
+  opacity: 1;
   padding: 10px 0;
   text-align: center;
   margin: 0;
   transition: 0.2s;
   border-radius: 5px 5px 0 0;
+}
+.about-modal {
+  margin: 25px;
+  background: #fff;
+  color: #000;
+  height: calc(100% - 50px);
+  width: calc(100% - 50px);
+  max-width: 600px;
+  border-radius: 10px;
+  overflow-y: scroll;
+}
+.overlay {
+  background: rgba(0,0,0,0.7);
+  height: 100%;
+  width: 100%;
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+.about-page {
+  margin: 25px;
 }

@@ -10,18 +10,22 @@ import { selectReverseNode } from '../updaters/nodeDetails'
 async function handleGetReverseRecord(rawAddress){
   let lowerCaseAddr = rawAddress.toLowerCase()
   let address = lowerCaseAddr.substring(0,2) === "0x" ? lowerCaseAddr : "0x" + lowerCaseAddr
-
   let isAddress = await checkAddress(address)
+
   if(isAddress){
     getName(address)
       .then(({name, resolverAddr}) => {
-        setReverseRecordDetails({address, name, resolverAddr})
+        setReverseRecordDetails({
+          address,
+          name,
+          resolver: resolverAddr
+        })
         addNotification(`Reverse record found for ${address}`)
         selectReverseNode(address)
       })
       .catch(err => {
-        console.log(err)
         setReverseRecordDetails({address, name: '0x', resolverAddr: '0x'})
+        selectReverseNode(address)
         addNotification('No reverse name record found at this address')
       })
   } else {

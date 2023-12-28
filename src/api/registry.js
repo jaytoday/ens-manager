@@ -1,12 +1,14 @@
-import getENS, { getNamehash, getENSEvent, getReverseRegistrarContract } from './ens'
+import getENS, { getNamehash, getNamehashWithLabelHash, getENSEvent, getReverseRegistrarContract, getResolverContract } from './ens'
 import { fromJS } from 'immutable'
 import { decryptHashes } from './preimage'
-import { uniq, ensStartBlock } from '../lib/utils'
+import { uniq, ensStartBlock, checkLabels, mergeLabels } from '../lib/utils'
+import getWeb3, { getAccounts } from '../api/web3'
 
 export async function claimReverseRecord(resolver){
   let { reverseRegistrar, web3 } = await getReverseRegistrarContract()
+  let accounts = await getAccounts()
   return new Promise((resolve, reject) => {
-    reverseRegistrar.claimWithResolver(web3.eth.accounts[0], resolver, { from: web3.eth.accounts[0] }, function(err, txId){
+    reverseRegistrar.claimWithResolver(accounts[0], resolver, { from: accounts[0] }, function(err, txId){
       if(err)
         reject(err)
       resolve(txId)
@@ -14,10 +16,13 @@ export async function claimReverseRecord(resolver){
   })
 }
 
-export async function setReverseRecordName(name){
-  let { reverseRegistrar, web3 } = await getReverseRegistrarContract()
+export async function setReverseRecordName(account, resolverAddr, name){
+  let { resolver, web3 } = await getResolverContract(resolverAddr)
+  let accounts = await getAccounts()
+  let reverseAddress = `${account.slice(2)}.addr.reverse`
+  let node = await getNamehash(reverseAddress)
   return new Promise((resolve, reject) => {
-    reverseRegistrar.setName(name, { from: web3.eth.accounts[0]}, function(err, txId){
+    resolver.setName(node, name, { from: accounts[0]}, function(err, txId){
       if(err)
         reject(err)
       resolve(txId)
@@ -31,10 +36,17 @@ export async function getOwner(name) {
 }
 
 export async function getResolver(name){
-  let { ENS, web3 } = await getENS()
   let node = await getNamehash(name)
+  let { ENS } = await getENS()
   let registry = await ENS.registryPromise
   return registry.resolverAsync(node)
+}
+
+export async function getResolverWithNameHash(label, node, name){
+  let { ENS } = await getENS()
+  let nodeHash = await getNamehashWithLabelHash(label, node)
+  let registry = await ENS.registryPromise
+  return registry.resolverAsync(nodeHash)
 }
 
 export async function getAddr(name){
@@ -62,19 +74,22 @@ export async function getContent(name){
 
 export async function setAddr(name, address){
   let { ENS, web3 } = await getENS()
+  let accounts = await getAccounts()
   let resolver = await ENS.resolver(name)
-  return resolver.setAddr(address, { from: web3.eth.accounts[0]})
+  return resolver.setAddr(address, { from: accounts[0]})
 }
 
 export async function setContent(name, content){
   let { ENS, web3 } = await getENS()
+  let accounts = await getAccounts()
   let resolver = await ENS.resolver(name)
-  return resolver.setContent(content, { from: web3.eth.accounts[0]})
+  return resolver.setContent(content, { from: accounts[0]})
 }
 
 export async function setResolver(name, resolver) {
+  let accounts = await getAccounts()
   let { ENS, web3 } = await getENS()
-  return ENS.setResolver(name, resolver, {from: web3.eth.accounts[0]})
+  return ENS.setResolver(name, resolver, {from: accounts[0]})
 }
 
 export async function checkSubDomain(subDomain, domain) {
@@ -82,12 +97,34 @@ export async function checkSubDomain(subDomain, domain) {
   return ENS.owner(subDomain + '.' + domain)
 }
 
+export async function buildSubDomain(label, node, owner) {
+  let { web3 } = await getWeb3()
+  let labelHash = web3.sha3(label)
+  let resolver = await getResolver(label + '.' +  node)
+  let subDomain = {
+    resolver,
+    labelHash,
+    owner,
+    label,
+    node,
+    name: label + '.' + node
+  }
+
+  if(parseInt(resolver, 16) === 0) {
+    return subDomain
+  } else {
+    let resolverAndNode = await getResolverDetails(subDomain)
+    return resolverAndNode
+  }
+}
+
 export async function createSubDomain(subDomain, domain) {
   let { ENS, web3 } = await getENS()
+  let accounts = await getAccounts()
   let node = await getNamehash(domain)
   let registry = await ENS.registryPromise
-  let txId = await registry.setSubnodeOwnerAsync(node, web3.sha3(subDomain), web3.eth.accounts[0], {from: web3.eth.accounts[0]});
-  return { txId, owner: web3.eth.accounts[0]}
+  let txId = await registry.setSubnodeOwnerAsync(node, web3.sha3(subDomain), accounts[0], {from: accounts[0]});
+  return { txId, owner: accounts[0]}
 }
 
 export async function deleteSubDomain(subDomain, domain){
@@ -96,26 +133,28 @@ export async function deleteSubDomain(subDomain, domain){
   let node = await getNamehash(domain)
   let registry = await ENS.registryPromise
   let resolver = await getResolver(name)
+  let accounts = await getAccounts()
   if(parseInt(resolver, 16) !== 0){
-    await setSubnodeOwner(subDomain, domain, web3.eth.accounts[0])
+    await setSubnodeOwner(subDomain, domain, accounts[0])
     await setResolver(name, 0)
   }
-  return registry.setSubnodeOwnerAsync(node, web3.sha3(subDomain), 0, {from: web3.eth.accounts[0]});
+  return registry.setSubnodeOwnerAsync(node, web3.sha3(subDomain), 0, {from: accounts[0]});
 }
 
 export async function setNewOwner(name, newOwner) {
   let { ENS, web3 } = await getENS()
-  return ENS.setOwner(name, newOwner, {from: web3.eth.accounts[0]})
+  let accounts = await getAccounts()
+  return ENS.setOwner(name, newOwner, {from: accounts[0]})
 }
 
 export async function setSubnodeOwner(label, node, newOwner) {
-  console.log('setting subnode to ', newOwner)
   let { ENS, web3 } = await getENS()
   let owner = await ENS.owner(node)
-  return ENS.setSubnodeOwner(label + '.' + node, newOwner, {from: web3.eth.accounts[0]})
+  let accounts = await getAccounts()
+  return ENS.setSubnodeOwner(label + '.' + node, newOwner, {from: accounts[0]})
 }
 
-function getResolverDetails(node){
+export function getResolverDetails(node){
   let addr = getAddr(node.name)
   let content = getContent(node.name)
   return Promise.all([addr, content]).then(([addr, content]) => ({
@@ -145,28 +184,45 @@ export function getRootDomain(name){
 
 export const getSubdomains = async name => {
   let startBlock = await ensStartBlock()
-  console.log(startBlock)
   let namehash = await getNamehash(name)
   let rawLogs = await getENSEvent('NewOwner', {node: namehash}, {fromBlock: startBlock, toBlock: 'latest'})
   let flattenedLogs = rawLogs.map(log => log.args)
+  flattenedLogs.reverse()
   let logs = uniq(flattenedLogs, 'label')
-  let labels = await decryptHashes(...logs.map(log => log.label))
+  let labelHashes = logs.map(log => log.label)
+  let remoteLabels = await decryptHashes(...labelHashes)
+  let localLabels = checkLabels(...labelHashes)
+  let labels = mergeLabels(localLabels, remoteLabels)
   let ownerPromises = labels.map(label => getOwner(`${label}.${name}`))
-  let resolverPromises = labels.map(label => getResolver(`${label}.${name}`))
+  let resolverPromises = logs.map((log, i) => getResolverWithNameHash(log.label, log.node))
 
   return Promise.all([
     Promise.all(ownerPromises),
     Promise.all(resolverPromises)
   ]).then(([owners, resolvers, addr, content]) => {
     /* Maps owner and resolver onto nodes */
-    return labels.map((value, index) => {
-      //if(label === false)
-      // TODO add check for labels that haven't been found
+    return logs.map((log, index) => {
+      let label
+      let owner
+      let decrypted
+
+      if(labels[index] === null) {
+        label = 'unknown' + logs[index].label.slice(-6)
+        owner = log.owner
+        decrypted = false
+      } else {
+        label = labels[index]
+        owner = owners[index]
+        decrypted = true
+      }
+
       return {
-        label: value,
+        decrypted,
+        label,
+        owner,
+        labelHash: logs[index].label,
         node: name,
-        owner: owners[index],
-        name: value + '.' + name,
+        name: label + '.' + name,
         resolver: resolvers[index],
         nodes: []
       }
@@ -175,7 +231,7 @@ export const getSubdomains = async name => {
     /* Gets Resolver information for node if they have a resolver */
     let nodePromises = nodes.map(node => {
       let hasResolver = parseInt(node.resolver, 16) !== 0
-      if(hasResolver) {
+      if(hasResolver && node.decrypted) {
         return getResolverDetails(node)
       }
       return Promise.resolve(node)

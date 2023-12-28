@@ -6,15 +6,20 @@ import {
   checkSubDomain,
   setResolver,
   createSubDomain,
-  deleteSubDomain
+  deleteSubDomain,
+  getResolver,
+  getResolverDetails,
+  buildSubDomain
 } from '../api/registry'
 import {
   appendSubDomain,
   updateNode,
-  resolveUpdatePath,
+  resolveQueryPath,
   removeSubDomain,
-  getNodeInfoSelector as getNodeInfo
+  getNodeInfo,
+  getParentNode,
 } from '../updaters/nodes'
+import { addLabelToPreImageDB } from '../updaters/preImageDB'
 import {
   updateForm,
   switchTab
@@ -29,10 +34,22 @@ import classnames from 'classnames'
 import ResolverDetails from './ResolverDetails'
 import TxLink from './TxLink'
 
-async function handleUpdateOwner(name, newOwner){
+async function handleUpdateOwner(name, currentOwner, newOwner){
   let etherscanAddr = await getEtherScanAddr()
   let domainArray = name.split('.')
-  if(domainArray.length > 2) {
+  console.log(newOwner)
+  if(currentOwner === db.accounts.get(0)) {
+    setNewOwner(name, newOwner).then(txId => {
+      let sentComponent = <span>New owner <TxLink addr={etherscanAddr} txId={txId}/> for {name} sent!</span>
+      addNotification(sentComponent, false)
+      watchRegistryEvent('Transfer', name, (error, log, event) => {
+        updateNode(name, 'owner', log.args.owner)
+        let confirmedComponent = <span>New owner <TxLink txId={txId}/> for {name} confirmed!</span>
+        addNotification(confirmedComponent, false)
+        event.stopWatching()
+      })
+    })
+  } else if(domainArray.length > 2) {
     let node = domainArray.slice(1).join('.')
     setSubnodeOwner(domainArray[0], domainArray.slice(1).join('.'), newOwner)
       .then(txId => {
@@ -49,22 +66,7 @@ async function handleUpdateOwner(name, newOwner){
         })
       })
   } else {
-    setNewOwner(name, newOwner).then(txId => {
-      let sentComponent = <span>New owner <TxLink addr={etherscanAddr} txId={txId}/> for {name} sent!</span>
-      addNotification(sentComponent, false)
-      watchRegistryEvent('Transfer', name, (error, log, event) => {
-        console.log(log)
-        console.log(event)
-        updateNode(name, 'owner', log.args.owner)
-        let confirmedComponent = <span>New owner <TxLink txId={txId}/> for {name} confirmed!</span>
-        addNotification(confirmedComponent, false)
-        event.stopWatching()
-      })
-    })
-  }
-
-  function watch(name, txId){
-
+    console.log('something went wrong')
   }
 }
 
@@ -87,18 +89,21 @@ function handleSetResolver(name, newResolver) {
   })
 }
 
-function handleCheckSubDomain(subDomain, domain){
+function handleCheckSubDomain(label, node){
   updateForm('subDomain', '')
-  checkSubDomain(subDomain, domain).then(address => {
-    if(address !== "0x0000000000000000000000000000000000000000"){
-      appendSubDomain(subDomain, domain, address)
+  checkSubDomain(label, node).then(async owner => {
+    if(owner !== "0x0000000000000000000000000000000000000000"){
+      let subDomain = await buildSubDomain(label, node, owner)
+      addLabelToPreImageDB(subDomain.labelHash, subDomain.label)
+      appendSubDomain(subDomain)
+      addNotification(label + '.' + node +  ' subdomain found')
     } else {
-      console.log('no subdomain with that name')
+      addNotification('no subdomain with that name')
     }
-  })
+  }).catch(err =>
+    console.error('in catch', err)
+  )
 }
-
-
 
 function handleCreateSubDomain(subDomain, domain){
   let name = subDomain + '.'+ domain
@@ -130,7 +135,6 @@ function handleCreateSubDomain(subDomain, domain){
 
 function handleDeleteSubDomain(subDomain, domain){
   checkSubDomain(subDomain, domain).then(address => {
-    console.log('here', subDomain, domain, address)
     if(address === "0x0000000000000000000000000000000000000000"){
       addNotification('subdomain already deleted!')
     } else {
@@ -139,6 +143,7 @@ function handleDeleteSubDomain(subDomain, domain){
           let { web3 } = await getWeb3()
           let labelHash = web3.sha3(subDomain)
           if(parseInt(log.args.owner, 16) === 0 && log.args.label === labelHash){
+            console.log('inside if')
             removeSubDomain(subDomain, domain)
             let etherscanAddr = await getEtherScanAddr()
             let confirmedComponent = <span>Delete domain <TxLink addr={etherscanAddr} txId={txId}/> for {subDomain + '.' + domain} confirmed!</span>
@@ -159,6 +164,23 @@ function handleSwitchTab(tab){
   switchTab(tab)
 }
 
+function isOwnerOrParentIsOwner(account, name){
+  let parent = getParentNode(name)
+  if(parent) {
+    return db.accounts.get(0) === getParentNode(name).get('owner') || db.accounts.get(0) === account
+  }
+
+  return db.accounts.get(0) === account
+}
+
+function isOwner(account){
+  return db.accounts.get(0) === account
+}
+
+function isSubDomain(name){
+  return name.split('.').length > 2
+}
+
 const Tabs = ({ selectedNode, currentTab }) => {
   let resolverTab,
       hasResolver = parseInt(getNodeInfo(selectedNode, 'resolver'), 16) !== 0
@@ -177,50 +199,78 @@ const Tabs = ({ selectedNode, currentTab }) => {
   </div>
 }
 
-const NodeDetails = ({ selectedNode }) => <div>
-  <div className="input-group">
-    <input placeholder="0x..." type="text" name="newOwner"
-      value={db.getIn(['updateForm', 'newOwner'])}
-      onChange={(e)=> handleOnChange('newOwner', e.target.value)}/>
-    <button
-      onClick={(e)=> handleUpdateOwner(getNodeInfo(selectedNode, 'name'), db.getIn(['updateForm', 'newOwner']))}>Update owner</button>
-  </div>
-  <div className="input-group">
-    <input
-      type="text"
-      name="resolver"
-      value={db.getIn(['updateForm', 'newResolver'])}
-      onChange={(e)=> handleOnChange('newResolver', e.target.value)}
-    />
-    <button placeholder="0x..." onClick={() => handleSetResolver(getNodeInfo(selectedNode, 'name'), db.getIn(['updateForm', 'newResolver']))}>Set Resolver</button>
-  </div>
-  <button onClick={() => handleSetDefaultResolver()}>Use default resolver</button>
-  <div className="input-group">
+const NodeDetails = ({ selectedNode }) => {
+  let newOwner
+  let newResolver
+  let defaultResolver
+  let checkSubdomain
+  let createSubDomain
+  let deleteSubDomain
+  let nodeOwner = getNodeInfo(selectedNode, 'owner')
+
+  checkSubdomain = <div className="input-group">
     <input type="text" name="subDomain" value={db.getIn(['updateForm', 'subDomain'])} onChange={(e)=> handleOnChange('subDomain', e.target.value)} />
     <button onClick={() => handleCheckSubDomain(db.getIn(['updateForm', 'subDomain']), getNodeInfo(selectedNode, 'name'))}>Check for subdomain</button>
   </div>
-  <div className="input-group">
-    <input type="text" name="subDomain" value={db.getIn(['updateForm', 'newSubDomain'])} onChange={(e)=> handleOnChange('newSubDomain', e.target.value)} />
-    <button onClick={() => handleCreateSubDomain(db.getIn(['updateForm', 'newSubDomain']), getNodeInfo(selectedNode, 'name'))}>Create new subdomain</button>
+
+  if(isOwnerOrParentIsOwner(nodeOwner, selectedNode)) {
+    newOwner = <div className="input-group">
+      <input placeholder="0x..." type="text" name="newOwner"
+        value={db.getIn(['updateForm', 'newOwner'])}
+        onChange={(e)=> handleOnChange('newOwner', e.target.value)}/>
+      <button
+        onClick={(e)=> handleUpdateOwner(getNodeInfo(selectedNode, 'name'), getNodeInfo(selectedNode, 'owner'), db.getIn(['updateForm', 'newOwner']))}>Update owner</button>
+    </div>
+  }
+
+  if(isOwner(nodeOwner)) {
+    newResolver = <div className="input-group">
+        <input
+          type="text"
+          name="resolver"
+          value={db.getIn(['updateForm', 'newResolver'])}
+          onChange={(e)=> handleOnChange('newResolver', e.target.value)}
+        />
+        <button placeholder="0x..." onClick={() => handleSetResolver(getNodeInfo(selectedNode, 'name'), db.getIn(['updateForm', 'newResolver']))}>Set Resolver</button>
+      </div>
+    defaultResolver = <button onClick={() => handleSetDefaultResolver()}>Use default resolver</button>
+    createSubDomain = <div className="input-group">
+        <input type="text" name="subDomain" value={db.getIn(['updateForm', 'newSubDomain'])} onChange={(e)=> handleOnChange('newSubDomain', e.target.value)} />
+        <button onClick={() => handleCreateSubDomain(db.getIn(['updateForm', 'newSubDomain']), getNodeInfo(selectedNode, 'name'))}>Create new subdomain</button>
+      </div>
+  }
+
+  if(isOwner(nodeOwner) && isSubDomain(selectedNode)){
+    deleteSubDomain = <button className="danger" onClick={() => handleDeleteSubDomain(getNodeInfo(selectedNode, 'label'), getNodeInfo(selectedNode, 'node'))}>Delete Node</button>
+  }
+
+  return <div>
+    {newOwner}
+    {newResolver}
+    {defaultResolver}
+    {checkSubdomain}
+    {createSubDomain}
+    {deleteSubDomain}
   </div>
-  <button className="danger" onClick={() => handleDeleteSubDomain(getNodeInfo(selectedNode, 'label'), getNodeInfo(selectedNode, 'node'))}>Delete Node</button>
-</div>
+}
 
 export default () => {
   const selectedNode = db.get('selectedNode')
-  let renderedContent = <div>Search and select a domain to start managing your domains!</div>,
-      tabContent,
-      addr,
-      content,
-      currentTab = db.get('currentTab')
+  let renderedContent = <div>Search and select a domain to start managing your domains!</div>
+  let tabContent
+  let addr
+  let content
+  let currentTab = db.get('currentTab')
 
-  if(selectedNode.length > 0){
+  if(selectedNode){
     switch(currentTab) {
       case 'nodeDetails':
         tabContent = <NodeDetails selectedNode={selectedNode} />
         break
       case 'resolverDetails':
-        tabContent = <ResolverDetails selectedNode={selectedNode} handleOnChange={handleOnChange} />
+        if(isOwner(getNodeInfo(selectedNode, 'owner'))) {
+          tabContent = <ResolverDetails selectedNode={selectedNode} handleOnChange={handleOnChange} />
+        }
         addr = <div className="current-addr info"><strong>Address:</strong> {getNodeInfo(selectedNode, 'addr')}</div>
         content = <div className="current-content info"><strong>Content:</strong> {getNodeInfo(selectedNode, 'content')}</div>
         break
